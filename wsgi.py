@@ -91,43 +91,41 @@ class Layout(BaseModel):
 def update_decks_and_cards(updateList):
     # Check if deck or card
     for idx, item in enumerate(updateList):
-        newItem = item.model_dump()
-        print(newItem)
         # Check for parent_id and set to None if not
-        if not hasattr(newItem, 'parent_id'):
-            newItem["parent_id"] = None # Default parent_id
+        if not 'parent_id' in item.keys():
+            item["parent_id"] = None # Default parent_id
         
-        if hasattr(item, 'children'):
+        if 'children' in item.keys():
             # Update Deck data
-            upsertDeck(newItem, idx + 1)
+            upsertDeck(item, idx + 1)
 
             # Check for children and run update on them if exist
-            if len(item.children) > 0:
-                for childItem in newItem["children"]:
-                    childItem["parent_id"] = newItem["deck_id"] # Set parent id on each child
-                update_decks_and_cards(newItem["children"])
+            if item["children"] and len(item["children"]) > 0:
+                for childItem in item["children"]:
+                    childItem["parent_id"] = item["deck_id"] # Set parent id on each child
+                update_decks_and_cards(item["children"])
         else:
-            print("Is Card")
             # Save parent_id as deck_id
-            upsertCard(newItem, idx + 1)
+            upsertCard(item, idx + 1)
 
 def upsertDeck(deck, order_value):
     query = '''
         INSERT INTO deck (name, parent_id, order_value)
         VALUES (?, ?, ?)
-        ON CONFLICT (deck_id) DO UPDATE 
-        SET parent_id = excluded.parent_id, 
-            order_value = excluded.order_value;
+        ON CONFLICT (name) DO UPDATE 
+        SET parent_id = excluded.parent_id
+            ,order_value = excluded.order_value;
     '''
     sql(query, (deck["name"], deck["parent_id"], order_value))
 
 def upsertCard(card, order_value):
+    print(card)
     query = '''
         INSERT INTO card (content, deck_id, order_value)
         VALUES (?, ?, ?)
-        ON CONFLICT (card_id) DO UPDATE 
+        ON CONFLICT (content) DO UPDATE 
         SET deck_id = excluded.deck_id 
-            order_value = excluded.order_value;
+            ,order_value = excluded.order_value;
     '''
     sql(query, (card["content"], card["parent_id"], order_value))
 
@@ -135,7 +133,11 @@ def upsertCard(card, order_value):
 def update_layout():
     """A method to update the relationships and ordering between decks and cards"""
     layout = Layout(**request.get_json())
-    update_decks_and_cards(layout.items)
+    layoutDump = layout.model_dump()
+    update_decks_and_cards(layoutDump["items"])
+
+    # layout = request.get_json()
+    # update_decks_and_cards(layout.items)
     return "Temporary Return"
 
 
