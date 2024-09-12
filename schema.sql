@@ -6,7 +6,9 @@ parent_id INTEGER,
 created_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 updated_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 order_value INTEGER NOT NULL,
-FOREIGN KEY(parent_id) references deck(deck_id));
+CONSTRAINT name_constraint UNIQUE (name),
+FOREIGN KEY(parent_id) references deck(deck_id))
+;
 
 DROP TABLE IF EXISTS card;
 CREATE TABLE card (
@@ -16,7 +18,9 @@ deck_id integer references deck(deck_id),
 created_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 updated_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 order_value INTEGER NOT NULL,
-FOREIGN KEY(deck_id) references deck(deck_id));
+CONSTRAINT content_constraint UNIQUE (content),
+FOREIGN KEY(deck_id) references deck(deck_id))
+;
 
 
 
