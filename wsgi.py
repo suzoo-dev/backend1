@@ -1,4 +1,5 @@
 import sqlite3
+from typing import List, Optional, Union
 from flask import Flask, jsonify, request
 import logging
 from pydantic import BaseModel
@@ -21,14 +22,23 @@ Please add the endpoint to this file.
 
 You can specify the interface to the frontend using a pydantic model like the Body model below if you want, or do something better.
 """
-def sql(query):
+def sql(query, params=None):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute(query)
-    results = cur.fetchall()
-    column_names = [column[0] for column in cur.description]
+    if params:
+        cur.execute(query, params)
+    else:
+        cur.execute(query)
+    if cur.description:
+        results = cur.fetchall()
+        column_names = [column[0] for column in cur.description]
+        conn.close()
+        return [dict(zip(column_names, row)) for row in results]
+    
+    conn.commit() 
     conn.close()
-    return [dict(zip(column_names, row)) for row in results]
+    return None
+
 
 @app.route('/')
 def sample_get_route():
@@ -62,10 +72,73 @@ def get_deck():
     """
     body = GetDeckWithCardsRequest(**request.get_json())
     card_results = sql(f'SELECT * FROM card WHERE deck_id = {body.deck_id}')
-    deck_results = sql('SELECT * FROM deck WHERE parent_id = {body.deck_id}')
+    deck_results = sql(f'SELECT * FROM deck WHERE parent_id = {body.deck_id}')
     json_results = {'deck_results': deck_results, 'card_results': card_results}
     return jsonify(json_results)
 
+class Deck(BaseModel):
+    deck_id: int
+    name: str
+    children: Optional[List[Union['Deck','Card']]]
+
+class Card(BaseModel):
+    card_id: int
+    content: str
+
+class Layout(BaseModel):
+    items: List['Deck']
+
+def update_decks_and_cards(updateList):
+    # Check if deck or card
+    for idx, item in enumerate(updateList):
+        newItem = item.model_dump()
+        print(newItem)
+        # Check for parent_id and set to None if not
+        if not hasattr(newItem, 'parent_id'):
+            newItem["parent_id"] = None # Default parent_id
+        
+        if hasattr(item, 'children'):
+            # Update Deck data
+            upsertDeck(newItem, idx + 1)
+
+            # Check for children and run update on them if exist
+            if len(item.children) > 0:
+                for childItem in newItem["children"]:
+                    childItem["parent_id"] = newItem["deck_id"] # Set parent id on each child
+                update_decks_and_cards(newItem["children"])
+        else:
+            print("Is Card")
+            # Save parent_id as deck_id
+            upsertCard(newItem, idx + 1)
+
+def upsertDeck(deck, order_value):
+    query = '''
+        INSERT INTO deck (name, parent_id, order_value)
+        VALUES (?, ?, ?)
+        ON CONFLICT (deck_id) DO UPDATE 
+        SET parent_id = excluded.parent_id, 
+            order_value = excluded.order_value;
+    '''
+    sql(query, (deck["name"], deck["parent_id"], order_value))
+
+def upsertCard(card, order_value):
+    query = '''
+        INSERT INTO card (content, deck_id, order_value)
+        VALUES (?, ?, ?)
+        ON CONFLICT (card_id) DO UPDATE 
+        SET deck_id = excluded.deck_id 
+            order_value = excluded.order_value;
+    '''
+    sql(query, (card["content"], card["parent_id"], order_value))
+
+@app.route('/update_layout', methods=['POST'])
+def update_layout():
+    """A method to update the relationships and ordering between decks and cards"""
+    layout = Layout(**request.get_json())
+    update_decks_and_cards(layout.items)
+    return "Temporary Return"
+
+
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001)
+    app.run(host='0.0.0.0', port=5001, debug=True)
