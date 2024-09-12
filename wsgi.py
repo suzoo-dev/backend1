@@ -119,7 +119,6 @@ def upsertDeck(deck, order_value):
     sql(query, (deck["name"], deck["parent_id"], order_value))
 
 def upsertCard(card, order_value):
-    print(card)
     query = '''
         INSERT INTO card (content, deck_id, order_value)
         VALUES (?, ?, ?)
